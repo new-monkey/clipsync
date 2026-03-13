@@ -34,6 +34,13 @@ func main() {
 	flag.DurationVar(&timeout, "timeout", 8*time.Second, "http request timeout")
 	flag.Parse()
 
+	if configPath == "" {
+		configPath = config.ResolveDefaultConfigPath("client.json")
+		if configPath != "" {
+			log.Printf("Using default client config: %s", configPath)
+		}
+	}
+
 	if configPath != "" {
 		fileCfg, err := config.LoadClient(configPath)
 		if err != nil {

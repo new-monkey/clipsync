@@ -46,11 +46,54 @@ chmod +x scripts/build-windows.sh
 - dist/clipsync-server.exe
 - dist/clipsync-client.exe
 
+### 1.1 打包发布 ZIP
+
+Linux/macOS:
+
+```bash
+chmod +x scripts/package-windows.sh
+./scripts/package-windows.sh
+```
+
+Windows:
+
+```powershell
+scripts\package-windows.bat
+```
+
+默认会生成：
+
+- dist/clipsync-windows-amd64.zip
+
+ZIP 内结构示例：
+
+```text
+clipsync-windows-amd64/
+  clipsync-server.exe
+  clipsync-client.exe
+  configs/
+    server.json
+    client.json
+  scripts/
+    install-autostart-client.ps1
+    install-autostart-server.ps1
+    uninstall-autostart.ps1
+  README.md
+  LICENSE
+```
+
 ### 2. 启动服务端（目标机器）
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json
 ```
+
+如果未显式传入 `-config`，程序会按以下顺序自动查找默认配置：
+
+1. 可执行文件所在目录下的 `configs/server.json`
+2. 可执行文件同目录下的 `server.json`
+3. 当前工作目录下的 `configs/server.json`
+4. 当前工作目录下的 `server.json`
 
 默认会自动打开面板：
 
@@ -61,6 +104,8 @@ http://127.0.0.1:8080/panel
 ```powershell
 clipsync-client.exe -config .\configs\client.json
 ```
+
+如果未显式传入 `-config`，客户端会按相同规则自动查找 `client.json`。
 
 ## 配置文件
 
@@ -138,6 +183,8 @@ clipsync-client.exe -config .\configs\client.json
 - [scripts/install-autostart-client.ps1](scripts/install-autostart-client.ps1)
 - [scripts/install-autostart-server.ps1](scripts/install-autostart-server.ps1)
 - [scripts/uninstall-autostart.ps1](scripts/uninstall-autostart.ps1)
+- [scripts/package-windows.bat](scripts/package-windows.bat)
+- [scripts/package-windows.sh](scripts/package-windows.sh)
 
 ## 开源文档
 

@@ -64,6 +64,13 @@ func main() {
 	flag.BoolVar(&notifyDebug, "notify-debug", false, "enable verbose notify diagnostics")
 	flag.Parse()
 
+	if configPath == "" {
+		configPath = config.ResolveDefaultConfigPath("server.json")
+		if configPath != "" {
+			log.Printf("Using default server config: %s", configPath)
+		}
+	}
+
 	if configPath != "" {
 		fileCfg, err := config.LoadServer(configPath)
 		if err != nil {
