@@ -15,6 +15,8 @@ import (
 	"clipsync/internal/config"
 	"clipsync/internal/protocol"
 	"clipsync/internal/servernotify"
+	"clipsync/internal/serverpanel"
+	"clipsync/internal/serverui"
 )
 
 func main() {
@@ -32,7 +34,11 @@ func main() {
 	cfg := config.ServerConfig{
 		ListenAddr:     ":8080",
 		MaxClipBytes:   1024 * 1024,
-		Notify:         true,
+		GUI:            false,
+		GUIAlwaysOnTop: true,
+		GUIMaxHistory:  200,
+		AutoOpenPanel:  true,
+		Notify:         false,
 		ToastAppID:     "PowerShell",
 		NotifySelfTest: false,
 		NotifyDebug:    false,
@@ -42,6 +48,10 @@ func main() {
 	var listenAddr string
 	var token string
 	var maxClipBytes int
+	var enableGUI bool
+	var guiAlwaysOnTop bool
+	var guiMaxHistory int
+	var autoOpenPanel bool
 	var enableNotify bool
 	var toastAppID string
 	var notifySelfTest bool
@@ -51,7 +61,11 @@ func main() {
 	flag.StringVar(&listenAddr, "listen", ":8080", "HTTP listen address")
 	flag.StringVar(&token, "token", "", "optional shared token")
 	flag.IntVar(&maxClipBytes, "max-bytes", 1024*1024, "max clipboard text size in bytes")
-	flag.BoolVar(&enableNotify, "notify", true, "show Windows toast on received clipboard")
+	flag.BoolVar(&enableGUI, "gui", false, "enable floating GUI panel on Windows")
+	flag.BoolVar(&guiAlwaysOnTop, "gui-always-on-top", true, "set GUI window always on top")
+	flag.IntVar(&guiMaxHistory, "gui-max-history", 200, "max history records shown in GUI")
+	flag.BoolVar(&autoOpenPanel, "auto-open-panel", true, "auto open web panel in browser on startup")
+	flag.BoolVar(&enableNotify, "notify", false, "show Windows toast on received clipboard")
 	flag.StringVar(&toastAppID, "toast-app-id", "PowerShell", "Windows toast AppUserModelID")
 	flag.BoolVar(&notifySelfTest, "notify-self-test", false, "show a startup self-test toast")
 	flag.BoolVar(&notifyDebug, "notify-debug", false, "enable verbose notify diagnostics")
@@ -70,6 +84,18 @@ func main() {
 		}
 		if fileCfg.MaxClipBytes > 0 {
 			cfg.MaxClipBytes = fileCfg.MaxClipBytes
+		}
+		if fileCfg.GUISet {
+			cfg.GUI = fileCfg.GUI
+		}
+		if fileCfg.GUIAlwaysOnTopSet {
+			cfg.GUIAlwaysOnTop = fileCfg.GUIAlwaysOnTop
+		}
+		if fileCfg.GUIMaxHistorySet {
+			cfg.GUIMaxHistory = fileCfg.GUIMaxHistory
+		}
+		if fileCfg.AutoOpenPanelSet {
+			cfg.AutoOpenPanel = fileCfg.AutoOpenPanel
 		}
 		if fileCfg.NotifySet {
 			cfg.Notify = fileCfg.Notify
@@ -99,6 +125,18 @@ func main() {
 	if setFlags["max-bytes"] {
 		cfg.MaxClipBytes = maxClipBytes
 	}
+	if setFlags["gui"] {
+		cfg.GUI = enableGUI
+	}
+	if setFlags["gui-always-on-top"] {
+		cfg.GUIAlwaysOnTop = guiAlwaysOnTop
+	}
+	if setFlags["gui-max-history"] {
+		cfg.GUIMaxHistory = guiMaxHistory
+	}
+	if setFlags["auto-open-panel"] {
+		cfg.AutoOpenPanel = autoOpenPanel
+	}
 	if setFlags["notify"] {
 		cfg.Notify = enableNotify
 	}
@@ -115,10 +153,36 @@ func main() {
 	if cfg.MaxClipBytes <= 0 {
 		log.Fatal("max-bytes must be positive")
 	}
+	if cfg.GUIMaxHistory <= 0 {
+		log.Fatal("gui-max-history must be positive")
+	}
 
 	if runtime.GOOS != "windows" {
+		cfg.GUI = false
 		cfg.Notify = false
+		cfg.AutoOpenPanel = false
 	}
+
+	var uiMgr serverui.Manager
+	if cfg.GUI {
+		startedUI, err := serverui.Start(serverui.Options{
+			Title:       "ClipSync 悬浮面板",
+			AlwaysOnTop: cfg.GUIAlwaysOnTop,
+			MaxHistory:  cfg.GUIMaxHistory,
+		})
+		if err != nil {
+			log.Printf("GUI startup failed: %v", err)
+		} else {
+			uiMgr = startedUI
+			log.Printf("Floating GUI enabled (alwaysOnTop=%v, maxHistory=%d)", cfg.GUIAlwaysOnTop, cfg.GUIMaxHistory)
+		}
+	}
+	defer func() {
+		if uiMgr != nil {
+			uiMgr.Close()
+		}
+	}()
+
 	if cfg.Notify {
 		log.Printf("Toast AppID: %s", cfg.ToastAppID)
 		if cfg.NotifyDebug {
@@ -156,6 +220,17 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	panel := serverpanel.New(cfg.GUIMaxHistory)
+	serverpanel.RegisterHandlers(mux, panel)
+	panelURL := fmt.Sprintf("http://127.0.0.1%s/panel", cfg.ListenAddr)
+	log.Printf("Web panel: %s", panelURL)
+	if cfg.AutoOpenPanel {
+		if err := serverpanel.OpenBrowser(panelURL); err != nil {
+			log.Printf("Auto open panel failed: %v", err)
+		} else {
+			log.Printf("Web panel opened in browser")
+		}
+	}
 	mux.HandleFunc("/clip", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -216,6 +291,18 @@ func main() {
 			}
 		}
 
+		if uiMgr != nil {
+			uiMgr.Publish(serverui.ClipEntry{
+				ReceivedAt: time.Now(),
+				Machine:    machine,
+				Bytes:      textBytes,
+				SHA256:     payload.SHA256,
+				Text:       payload.Text,
+			})
+		}
+
+		panel.Add(machine, textBytes, payload.SHA256, payload.Text)
+
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
@@ -231,6 +318,9 @@ func main() {
 
 	log.Printf("ClipSync server listening on %s", cfg.ListenAddr)
 	log.Printf("Receive endpoint: http://<host>%s/clip", cfg.ListenAddr)
+	if uiMgr != nil {
+		log.Printf("Floating GUI enabled")
+	}
 	if cfg.Notify {
 		log.Printf("Windows notification enabled")
 	}

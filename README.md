@@ -14,7 +14,7 @@ It is designed for quick delivery and portable deployment on Windows 10/11.
 - Supports long text up to 1MB
 - Single-file executables (no runtime dependency installation)
 - Optional shared token authentication
-- Server can show Windows toast with one-click copy button
+- Server includes a built-in web panel for copy, collapse/expand, and history
 
 ## Build
 
@@ -43,6 +43,20 @@ Output files:
 ```powershell
 clipsync-server.exe -listen :8080 -max-bytes 1048576
 ```
+
+By default, web panel is enabled (no desktop GUI dependency):
+
+- Open in browser: `http://127.0.0.1:8080/panel`
+- Button: `复制最新内容`
+- History list: latest messages with timestamp/machine/size
+- Detail area: newest message is expanded by default; others can `展开` / `收起`
+
+Optional desktop floating GUI (disabled by default):
+
+- Button: `复制最新内容`
+- History list: latest messages with timestamp/machine/size
+- Detail area: can be `折叠详情` / `展开详情`
+- `清空历史` button to reset records
 
 Optional token:
 
@@ -75,7 +89,11 @@ File: `configs/server.json`
 	"listen_addr": ":8080",
 	"token": "",
 	"max_clip_bytes": 1048576,
-	"notify": true,
+	"gui": false,
+	"gui_always_on_top": true,
+	"gui_max_history": 200,
+	"auto_open_panel": true,
+	"notify": false,
 	"toast_app_id": "PowerShell",
 	"notify_self_test": false,
 	"notify_debug": false
@@ -92,6 +110,24 @@ Disable notification:
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json -notify=false
+```
+
+Disable floating GUI:
+
+```powershell
+clipsync-server.exe -config .\configs\server.json -gui=false
+```
+
+Web panel URL (same server port):
+
+```text
+http://127.0.0.1:8080/panel
+```
+
+Disable auto-open browser:
+
+```powershell
+clipsync-server.exe -config .\configs\server.json -auto-open-panel=false
 ```
 
 Send one startup self-test notification:
@@ -170,7 +206,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - `-listen` HTTP listening address (default `:8080`)
 - `-token` optional shared token
 - `-max-bytes` max accepted clipboard text bytes (default `1048576`)
-- `-notify` show Windows toast on receive (default `true`)
+- `-gui` enable floating GUI on Windows (default `false`)
+- `-gui-always-on-top` keep GUI always on top (default `true`)
+- `-gui-max-history` max history records in GUI (default `200`)
+- `-auto-open-panel` auto open web panel in browser on startup (default `true`)
+- `-notify` show Windows toast on receive (default `false`)
 - `-toast-app-id` toast AppUserModelID (default `PowerShell`)
 - `-notify-self-test` show one startup self-test toast (default `false`)
 - `-notify-debug` print verbose notification diagnostics (default `false`)
@@ -191,5 +231,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - Non-text clipboard content is ignored.
 - Empty text is ignored.
 - If text is larger than `-max-bytes`, client skips it and logs a warning.
-- On Windows server, each received text can trigger a toast with `复制到剪贴板` button.
-- Clicking the button launches server executable via protocol callback and writes the received text into local clipboard.
+- Built-in web panel shows incoming messages and supports one-click copy.
+- Desktop floating GUI remains optional (`-gui=true`) but may vary by Windows environment.
+- Toast notification path remains optional (`-notify=true`) for troubleshooting.

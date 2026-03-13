@@ -2,7 +2,11 @@
   "listen_addr": ":8080",
   "token": "",
   "max_clip_bytes": 1048576,
-  "notify": true,
+  "gui": false,
+  "gui_always_on_top": true,
+  "gui_max_history": 200,
+  "auto_open_panel": true,
+  "notify": false,
   "toast_app_id": "PowerShell",
   "notify_self_test": false,
   "notify_debug": false
