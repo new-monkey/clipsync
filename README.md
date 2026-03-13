@@ -1,218 +1,155 @@
-# ClipSync (Windows one-way clipboard sync)
+# ClipSync
 
-ClipSync is a tiny two-process tool for one-way clipboard sync:
+轻量级 Windows 单向剪贴板同步工具（客户端 -> 服务端）。
 
-- Client: watches local clipboard text changes and pushes updates.
-- Server: receives pushed text and prints it to console for manual viewing/copying.
+- 客户端监听本机剪贴板文本变化并推送。
+- 服务端接收后输出控制台日志，并提供本地 Web 面板用于查看历史、展开详情和复制。
 
-It is designed for quick delivery and portable deployment on Windows 10/11.
+目标环境：Windows 10 / Windows 11。
 
-## Features
+## 核心特性
 
-- One-way sync: client -> server
-- Text clipboard only
-- Supports long text up to 1MB
-- Single-file executables (no runtime dependency installation)
-- Optional shared token authentication
-- Server includes a built-in web panel for copy, collapse/expand, and history
+- 单向同步：客户端 -> 服务端
+- 仅处理文本剪贴板
+- 文本大小上限：1MB
+- 服务端内置 Web 面板（无需桌面 GUI 依赖）
+- 复制反馈增强（按钮处理中、状态栏、Toast 提示）
+- 可选 token 鉴权
+- 可选开机自启脚本（Task Scheduler）
 
-## Build
+## 架构说明
 
-### Build on Windows
+1. 客户端轮询剪贴板文本，检测变更后发送 HTTP POST 到服务端。
+2. 服务端校验请求与大小限制，写入控制台日志。
+3. 服务端将消息写入内存历史，Web 面板从本地接口读取并展示。
+4. 面板支持复制最新消息或指定消息到服务端机器剪贴板。
+
+## 快速开始
+
+### 1. 构建
+
+Windows:
 
 ```powershell
 scripts\build-windows.bat
 ```
 
-### Build on Linux/macOS for Windows
+Linux/macOS 交叉编译 Windows:
 
 ```bash
 chmod +x scripts/build-windows.sh
 ./scripts/build-windows.sh
 ```
 
-Output files:
+输出文件：
 
-- `dist/clipsync-server.exe`
-- `dist/clipsync-client.exe`
+- dist/clipsync-server.exe
+- dist/clipsync-client.exe
 
-## Run
-
-### 1) Start server (on destination machine)
-
-```powershell
-clipsync-server.exe -listen :8080 -max-bytes 1048576
-```
-
-By default, web panel is enabled (no desktop GUI dependency):
-
-- Open in browser: `http://127.0.0.1:8080/panel`
-- Button: `复制最新内容`
-- History list: latest messages with timestamp/machine/size
-- Detail area: newest message is expanded by default; others can `展开` / `收起`
-
-Optional token:
-
-```powershell
-clipsync-server.exe -listen :8080 -token your-secret-token
-```
-
-### 2) Start client (on source machine)
-
-```powershell
-clipsync-client.exe -server http://SERVER_IP:8080/clip -interval 300ms -max-bytes 1048576
-```
-
-With token:
-
-```powershell
-clipsync-client.exe -server http://SERVER_IP:8080/clip -token your-secret-token
-```
-
-## Config File Mode
-
-Both executables support `-config` to load JSON config.
-
-### Server config example
-
-File: `configs/server.json`
-
-```json
-{
-	"listen_addr": ":8080",
-	"token": "",
-	"max_clip_bytes": 1048576,
-	"panel_max_history": 200,
-	"auto_open_panel": true,
-	"notify": false,
-	"toast_app_id": "PowerShell",
-	"notify_self_test": false,
-	"notify_debug": false
-}
-```
-
-Run with config:
+### 2. 启动服务端（目标机器）
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json
 ```
 
-Disable notification:
+默认会自动打开面板：
 
-```powershell
-clipsync-server.exe -config .\configs\server.json -notify=false
-```
-
-Web panel URL (same server port):
-
-```text
 http://127.0.0.1:8080/panel
-```
 
-Disable auto-open browser:
-
-```powershell
-clipsync-server.exe -config .\configs\server.json -auto-open-panel=false
-```
-
-Send one startup self-test notification:
-
-```powershell
-clipsync-server.exe -config .\configs\server.json -notify-self-test=true
-```
-
-Enable verbose notification diagnostics:
-
-```powershell
-clipsync-server.exe -config .\configs\server.json -notify-debug=true -notify-self-test=true
-```
-
-### Client config example
-
-File: `configs/client.json`
-
-```json
-{
-	"server_url": "http://127.0.0.1:8080/clip",
-	"token": "",
-	"interval": "300ms",
-	"machine_id": "",
-	"max_clip_bytes": 1048576,
-	"timeout": "8s"
-}
-```
-
-Run with config:
+### 3. 启动客户端（源机器）
 
 ```powershell
 clipsync-client.exe -config .\configs\client.json
 ```
 
-You can still override config values using CLI flags. Example:
+## 配置文件
 
-```powershell
-clipsync-client.exe -config .\configs\client.json -server http://SERVER_IP:8080/clip
+### 服务端配置示例
+
+见 [configs/server.json](configs/server.json)
+
+```json
+{
+  "listen_addr": ":8080",
+  "token": "",
+  "max_clip_bytes": 1048576,
+  "panel_max_history": 200,
+  "auto_open_panel": true,
+  "notify": false,
+  "toast_app_id": "PowerShell",
+  "notify_self_test": false,
+  "notify_debug": false
+}
 ```
 
-## Windows Auto Start (Task Scheduler)
+### 客户端配置示例
 
-Build first, then register scheduled tasks by PowerShell scripts.
+见 [configs/client.json](configs/client.json)
 
-### Register client at user logon
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart-client.ps1
+```json
+{
+  "server_url": "http://127.0.0.1:8080/clip",
+  "token": "",
+  "interval": "300ms",
+  "machine_id": "",
+  "max_clip_bytes": 1048576,
+  "timeout": "8s"
+}
 ```
 
-### Register server at user logon
+## 命令行参数
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart-server.ps1
-```
+### 服务端
 
-### Register server at system startup (usually needs admin)
+- -config：JSON 配置文件路径
+- -listen：监听地址，默认 :8080
+- -token：可选鉴权 token
+- -max-bytes：最大接收文本字节数，默认 1048576
+- -panel-max-history：Web 面板历史条数，默认 200
+- -auto-open-panel：启动时自动打开面板，默认 true
+- -notify：可选系统通知，默认 false
+- -toast-app-id：通知 AppID，默认 PowerShell
+- -notify-self-test：发送启动自检通知，默认 false
+- -notify-debug：通知调试日志，默认 false
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-autostart-server.ps1 -AtStartup
-```
+### 客户端
 
-### Remove scheduled task
+- -config：JSON 配置文件路径
+- -server：服务端地址，默认 http://127.0.0.1:8080/clip
+- -token：可选鉴权 token
+- -interval：轮询间隔，默认 300ms
+- -machine：机器标识（日志显示）
+- -max-bytes：最大文本字节数，默认 1048576
+- -timeout：请求超时，默认 8s
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -TaskName ClipSyncClient
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -TaskName ClipSyncServer
-```
+## Web 面板能力
 
-## Parameters
+- 历史列表展示（时间、来源、大小）
+- 最新消息默认展开
+- 手动展开/收起状态在刷新时保持
+- 最新消息变历史时自动收起（若无手动覆盖）
+- 复制最新消息 / 复制指定消息
+- 复制成功与失败都有明确反馈
 
-### Server
+## 自动启动脚本
 
-- `-config` path to JSON config file
-- `-listen` HTTP listening address (default `:8080`)
-- `-token` optional shared token
-- `-max-bytes` max accepted clipboard text bytes (default `1048576`)
-- `-panel-max-history` max history records in web panel (default `200`)
-- `-auto-open-panel` auto open web panel in browser on startup (default `true`)
-- `-notify` show Windows toast on receive (default `false`)
-- `-toast-app-id` toast AppUserModelID (default `PowerShell`)
-- `-notify-self-test` show one startup self-test toast (default `false`)
-- `-notify-debug` print verbose notification diagnostics (default `false`)
+脚本目录：[scripts](scripts)
 
-### Client
+- [scripts/install-autostart-client.ps1](scripts/install-autostart-client.ps1)
+- [scripts/install-autostart-server.ps1](scripts/install-autostart-server.ps1)
+- [scripts/uninstall-autostart.ps1](scripts/uninstall-autostart.ps1)
 
-- `-config` path to JSON config file
-- `-server` server endpoint URL (default `http://127.0.0.1:8080/clip`)
-- `-token` optional shared token
-- `-interval` polling interval (default `300ms`)
-- `-machine` optional machine id shown in logs
-- `-max-bytes` max clipboard text bytes (default `1048576`)
-- `-timeout` request timeout (default `8s`)
+## 开源文档
 
-## Notes
+- [LICENSE](LICENSE)
+- [CHANGELOG.md](CHANGELOG.md)
+- [SECURITY.md](SECURITY.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 
-- The client only supports Windows clipboard reading.
-- Non-text clipboard content is ignored.
-- Empty text is ignored.
-- If text is larger than `-max-bytes`, client skips it and logs a warning.
-- Built-in web panel shows incoming messages and supports one-click copy.
-- Toast notification path remains optional (`-notify=true`) for troubleshooting.
+## 注意事项
+
+- 客户端仅支持 Windows 剪贴板读取。
+- 仅同步文本内容，非文本格式会忽略。
+- 空文本会忽略。
+- 超过 max-bytes 的文本会跳过并记录日志。
+- 默认不开启系统通知（notify=false）。
