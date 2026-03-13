@@ -7,38 +7,33 @@ import (
 )
 
 type ServerConfig struct {
-	ListenAddr        string
-	Token             string
-	MaxClipBytes      int
-	GUI               bool
-	GUISet            bool
-	GUIAlwaysOnTop    bool
-	GUIAlwaysOnTopSet bool
-	GUIMaxHistory     int
-	GUIMaxHistorySet  bool
-	AutoOpenPanel     bool
-	AutoOpenPanelSet  bool
-	Notify            bool
-	NotifySet         bool
-	ToastAppID        string
-	NotifySelfTest    bool
-	NotifySelfTestSet bool
-	NotifyDebug       bool
-	NotifyDebugSet    bool
+	ListenAddr         string
+	Token              string
+	MaxClipBytes       int
+	PanelMaxHistory    int
+	PanelMaxHistorySet bool
+	AutoOpenPanel      bool
+	AutoOpenPanelSet   bool
+	Notify             bool
+	NotifySet          bool
+	ToastAppID         string
+	NotifySelfTest     bool
+	NotifySelfTestSet  bool
+	NotifyDebug        bool
+	NotifyDebugSet     bool
 }
 
 type ServerFile struct {
-	ListenAddr     *string `json:"listen_addr"`
-	Token          *string `json:"token"`
-	MaxClipBytes   *int    `json:"max_clip_bytes"`
-	GUI            *bool   `json:"gui"`
-	GUIAlwaysOnTop *bool   `json:"gui_always_on_top"`
-	GUIMaxHistory  *int    `json:"gui_max_history"`
-	AutoOpenPanel  *bool   `json:"auto_open_panel"`
-	Notify         *bool   `json:"notify"`
-	ToastAppID     *string `json:"toast_app_id"`
-	NotifySelfTest *bool   `json:"notify_self_test"`
-	NotifyDebug    *bool   `json:"notify_debug"`
+	ListenAddr          *string `json:"listen_addr"`
+	Token               *string `json:"token"`
+	MaxClipBytes        *int    `json:"max_clip_bytes"`
+	PanelMaxHistory     *int    `json:"panel_max_history"`
+	LegacyGUIMaxHistory *int    `json:"gui_max_history"`
+	AutoOpenPanel       *bool   `json:"auto_open_panel"`
+	Notify              *bool   `json:"notify"`
+	ToastAppID          *string `json:"toast_app_id"`
+	NotifySelfTest      *bool   `json:"notify_self_test"`
+	NotifyDebug         *bool   `json:"notify_debug"`
 }
 
 func LoadServer(path string) (ServerConfig, error) {
@@ -66,17 +61,12 @@ func LoadServer(path string) (ServerConfig, error) {
 	if fileCfg.MaxClipBytes != nil {
 		cfg.MaxClipBytes = *fileCfg.MaxClipBytes
 	}
-	if fileCfg.GUI != nil {
-		cfg.GUI = *fileCfg.GUI
-		cfg.GUISet = true
-	}
-	if fileCfg.GUIAlwaysOnTop != nil {
-		cfg.GUIAlwaysOnTop = *fileCfg.GUIAlwaysOnTop
-		cfg.GUIAlwaysOnTopSet = true
-	}
-	if fileCfg.GUIMaxHistory != nil {
-		cfg.GUIMaxHistory = *fileCfg.GUIMaxHistory
-		cfg.GUIMaxHistorySet = true
+	if fileCfg.PanelMaxHistory != nil {
+		cfg.PanelMaxHistory = *fileCfg.PanelMaxHistory
+		cfg.PanelMaxHistorySet = true
+	} else if fileCfg.LegacyGUIMaxHistory != nil {
+		cfg.PanelMaxHistory = *fileCfg.LegacyGUIMaxHistory
+		cfg.PanelMaxHistorySet = true
 	}
 	if fileCfg.AutoOpenPanel != nil {
 		cfg.AutoOpenPanel = *fileCfg.AutoOpenPanel

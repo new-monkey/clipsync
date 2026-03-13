@@ -51,13 +51,6 @@ By default, web panel is enabled (no desktop GUI dependency):
 - History list: latest messages with timestamp/machine/size
 - Detail area: newest message is expanded by default; others can `展开` / `收起`
 
-Optional desktop floating GUI (disabled by default):
-
-- Button: `复制最新内容`
-- History list: latest messages with timestamp/machine/size
-- Detail area: can be `折叠详情` / `展开详情`
-- `清空历史` button to reset records
-
 Optional token:
 
 ```powershell
@@ -89,9 +82,7 @@ File: `configs/server.json`
 	"listen_addr": ":8080",
 	"token": "",
 	"max_clip_bytes": 1048576,
-	"gui": false,
-	"gui_always_on_top": true,
-	"gui_max_history": 200,
+	"panel_max_history": 200,
 	"auto_open_panel": true,
 	"notify": false,
 	"toast_app_id": "PowerShell",
@@ -110,12 +101,6 @@ Disable notification:
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json -notify=false
-```
-
-Disable floating GUI:
-
-```powershell
-clipsync-server.exe -config .\configs\server.json -gui=false
 ```
 
 Web panel URL (same server port):
@@ -206,9 +191,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - `-listen` HTTP listening address (default `:8080`)
 - `-token` optional shared token
 - `-max-bytes` max accepted clipboard text bytes (default `1048576`)
-- `-gui` enable floating GUI on Windows (default `false`)
-- `-gui-always-on-top` keep GUI always on top (default `true`)
-- `-gui-max-history` max history records in GUI (default `200`)
+- `-panel-max-history` max history records in web panel (default `200`)
 - `-auto-open-panel` auto open web panel in browser on startup (default `true`)
 - `-notify` show Windows toast on receive (default `false`)
 - `-toast-app-id` toast AppUserModelID (default `PowerShell`)
@@ -232,5 +215,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - Empty text is ignored.
 - If text is larger than `-max-bytes`, client skips it and logs a warning.
 - Built-in web panel shows incoming messages and supports one-click copy.
-- Desktop floating GUI remains optional (`-gui=true`) but may vary by Windows environment.
 - Toast notification path remains optional (`-notify=true`) for troubleshooting.
