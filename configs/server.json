@@ -1,0 +1,5 @@
+{
+  "listen_addr": ":8080",
+  "token": "",
+  "max_clip_bytes": 1048576
+}
