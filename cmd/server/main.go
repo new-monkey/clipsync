@@ -7,28 +7,54 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
 	"clipsync/internal/config"
 	"clipsync/internal/protocol"
+	"clipsync/internal/servernotify"
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		handled, err := servernotify.HandleProtocolArg(servernotify.NormalizePathFromArgs(os.Args[1]))
+		if handled {
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Clipboard updated from notification action")
+			return
+		}
+	}
+
 	cfg := config.ServerConfig{
-		ListenAddr:   ":8080",
-		MaxClipBytes: 1024 * 1024,
+		ListenAddr:     ":8080",
+		MaxClipBytes:   1024 * 1024,
+		Notify:         true,
+		ToastAppID:     "PowerShell",
+		NotifySelfTest: false,
+		NotifyDebug:    false,
 	}
 
 	var configPath string
 	var listenAddr string
 	var token string
 	var maxClipBytes int
+	var enableNotify bool
+	var toastAppID string
+	var notifySelfTest bool
+	var notifyDebug bool
 
 	flag.StringVar(&configPath, "config", "", "path to JSON config file")
 	flag.StringVar(&listenAddr, "listen", ":8080", "HTTP listen address")
 	flag.StringVar(&token, "token", "", "optional shared token")
 	flag.IntVar(&maxClipBytes, "max-bytes", 1024*1024, "max clipboard text size in bytes")
+	flag.BoolVar(&enableNotify, "notify", true, "show Windows toast on received clipboard")
+	flag.StringVar(&toastAppID, "toast-app-id", "PowerShell", "Windows toast AppUserModelID")
+	flag.BoolVar(&notifySelfTest, "notify-self-test", false, "show a startup self-test toast")
+	flag.BoolVar(&notifyDebug, "notify-debug", false, "enable verbose notify diagnostics")
 	flag.Parse()
 
 	if configPath != "" {
@@ -44,6 +70,18 @@ func main() {
 		}
 		if fileCfg.MaxClipBytes > 0 {
 			cfg.MaxClipBytes = fileCfg.MaxClipBytes
+		}
+		if fileCfg.NotifySet {
+			cfg.Notify = fileCfg.Notify
+		}
+		if fileCfg.ToastAppID != "" {
+			cfg.ToastAppID = fileCfg.ToastAppID
+		}
+		if fileCfg.NotifySelfTestSet {
+			cfg.NotifySelfTest = fileCfg.NotifySelfTest
+		}
+		if fileCfg.NotifyDebugSet {
+			cfg.NotifyDebug = fileCfg.NotifyDebug
 		}
 	}
 
@@ -61,9 +99,60 @@ func main() {
 	if setFlags["max-bytes"] {
 		cfg.MaxClipBytes = maxClipBytes
 	}
+	if setFlags["notify"] {
+		cfg.Notify = enableNotify
+	}
+	if setFlags["toast-app-id"] {
+		cfg.ToastAppID = toastAppID
+	}
+	if setFlags["notify-self-test"] {
+		cfg.NotifySelfTest = notifySelfTest
+	}
+	if setFlags["notify-debug"] {
+		cfg.NotifyDebug = notifyDebug
+	}
 
 	if cfg.MaxClipBytes <= 0 {
 		log.Fatal("max-bytes must be positive")
+	}
+
+	if runtime.GOOS != "windows" {
+		cfg.Notify = false
+	}
+	if cfg.Notify {
+		log.Printf("Toast AppID: %s", cfg.ToastAppID)
+		if cfg.NotifyDebug {
+			log.Printf("Notify debug mode enabled")
+		}
+		if err := servernotify.DiagnoseEnvironment(cfg.NotifyDebug); err != nil {
+			log.Printf("Notify environment diagnostic failed: %v", err)
+		}
+		exePath, err := servernotify.ExecutablePath()
+		if err != nil {
+			log.Printf("Notification disabled: unable to resolve executable path: %v", err)
+			cfg.Notify = false
+		} else {
+			if servernotify.IsLikelyWSLPath(exePath) {
+				log.Printf("Warning: executable is running from WSL path (%s)", exePath)
+				log.Printf("Warning: Windows toast visibility and protocol callback may be unreliable from WSL path. Prefer running from local Windows path such as C:\\ClipSync\\dist")
+			}
+			if err := servernotify.EnsureProtocolRegistered(exePath, cfg.NotifyDebug); err != nil {
+				log.Printf("Notification enabled but protocol registration failed: %v", err)
+			}
+		}
+		if cfg.NotifySelfTest {
+			testText := "ClipSync server startup self-test"
+			path, err := servernotify.SaveClipText(testText)
+			if err != nil {
+				log.Printf("Self-test notification skipped: %v", err)
+			} else {
+				if err := servernotify.NotifyClipReceived(cfg.ToastAppID, "ClipSync 通知自检", "如果你看到这条通知，说明服务端通知链路可用。", path, cfg.NotifyDebug); err != nil {
+					log.Printf("Self-test notification failed: %v", err)
+				} else {
+					log.Printf("Self-test notification sent")
+				}
+			}
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -115,6 +204,18 @@ func main() {
 			payload.Text,
 		)
 
+		if cfg.Notify {
+			path, err := servernotify.SaveClipText(payload.Text)
+			if err != nil {
+				log.Printf("Save received clip for copy action failed: %v", err)
+			} else {
+				title := fmt.Sprintf("收到来自 %s 的剪贴板", machine)
+				if err := servernotify.NotifyClipReceived(cfg.ToastAppID, title, payload.Text, path, cfg.NotifyDebug); err != nil {
+					log.Printf("Windows toast failed: %v", err)
+				}
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
@@ -130,6 +231,9 @@ func main() {
 
 	log.Printf("ClipSync server listening on %s", cfg.ListenAddr)
 	log.Printf("Receive endpoint: http://<host>%s/clip", cfg.ListenAddr)
+	if cfg.Notify {
+		log.Printf("Windows notification enabled")
+	}
 	if cfg.Token != "" {
 		log.Printf("Token auth enabled")
 	}

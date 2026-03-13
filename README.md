@@ -14,6 +14,7 @@ It is designed for quick delivery and portable deployment on Windows 10/11.
 - Supports long text up to 1MB
 - Single-file executables (no runtime dependency installation)
 - Optional shared token authentication
+- Server can show Windows toast with one-click copy button
 
 ## Build
 
@@ -73,7 +74,11 @@ File: `configs/server.json`
 {
 	"listen_addr": ":8080",
 	"token": "",
-	"max_clip_bytes": 1048576
+	"max_clip_bytes": 1048576,
+	"notify": true,
+	"toast_app_id": "PowerShell",
+	"notify_self_test": false,
+	"notify_debug": false
 }
 ```
 
@@ -81,6 +86,24 @@ Run with config:
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json
+```
+
+Disable notification:
+
+```powershell
+clipsync-server.exe -config .\configs\server.json -notify=false
+```
+
+Send one startup self-test notification:
+
+```powershell
+clipsync-server.exe -config .\configs\server.json -notify-self-test=true
+```
+
+Enable verbose notification diagnostics:
+
+```powershell
+clipsync-server.exe -config .\configs\server.json -notify-debug=true -notify-self-test=true
 ```
 
 ### Client config example
@@ -147,6 +170,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - `-listen` HTTP listening address (default `:8080`)
 - `-token` optional shared token
 - `-max-bytes` max accepted clipboard text bytes (default `1048576`)
+- `-notify` show Windows toast on receive (default `true`)
+- `-toast-app-id` toast AppUserModelID (default `PowerShell`)
+- `-notify-self-test` show one startup self-test toast (default `false`)
+- `-notify-debug` print verbose notification diagnostics (default `false`)
 
 ### Client
 
@@ -164,3 +191,5 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-autostart.ps1 -Task
 - Non-text clipboard content is ignored.
 - Empty text is ignored.
 - If text is larger than `-max-bytes`, client skips it and logs a warning.
+- On Windows server, each received text can trigger a toast with `复制到剪贴板` button.
+- Clicking the button launches server executable via protocol callback and writes the received text into local clipboard.

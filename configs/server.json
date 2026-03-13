@@ -1,5 +1,9 @@
 {
   "listen_addr": ":8080",
   "token": "",
-  "max_clip_bytes": 1048576
+  "max_clip_bytes": 1048576,
+  "notify": true,
+  "toast_app_id": "PowerShell",
+  "notify_self_test": false,
+  "notify_debug": false
 }
