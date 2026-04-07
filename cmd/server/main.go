@@ -16,6 +16,7 @@ import (
 	"clipsync/internal/protocol"
 	"clipsync/internal/servernotify"
 	"clipsync/internal/serverpanel"
+	"clipsync/internal/wsclient"
 )
 
 func main() {
@@ -197,6 +198,28 @@ func main() {
 		} else {
 			log.Printf("Web panel opened in browser")
 		}
+	}
+
+	// reverse-push模式下，作为WebSocket客户端接收A端推送
+	if cfg.Mode == "reverse-push" {
+		go func() {
+			addr := cfg.ClientWSAddr
+			if addr == "" {
+				log.Fatal("reverse-push模式下client_ws_addr不能为空，应为A端的ws地址，如192.168.1.100:8081")
+			}
+			err := wsclient.RunWSClient(addr, cfg.Token, func(payload protocol.ClipPayload) {
+				textBytes := len([]byte(payload.Text))
+				machine := payload.MachineID
+				if strings.TrimSpace(machine) == "" {
+					machine = "unknown"
+				}
+				log.Printf("[reverse-push] Received from ws: %d bytes from %s", textBytes, machine)
+				panel.Add(machine, textBytes, payload.SHA256, payload.Text)
+			})
+			if err != nil {
+				log.Fatalf("wsclient error: %v", err)
+			}
+		}()
 	}
 	mux.HandleFunc("/clip", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

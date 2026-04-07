@@ -12,11 +12,13 @@ import (
 
 type ClientFile struct {
 	ServerURL    *string `json:"server_url"`
+	WSListenAddr *string `json:"ws_listen_addr"`
 	Token        *string `json:"token"`
 	Interval     *string `json:"interval"`
 	MachineID    *string `json:"machine_id"`
 	MaxClipBytes *int    `json:"max_clip_bytes"`
 	Timeout      *string `json:"timeout"`
+	Mode         *string `json:"mode"`
 }
 
 func LoadClient(path string) (client.Config, error) {
@@ -37,6 +39,9 @@ func LoadClient(path string) (client.Config, error) {
 
 	if fileCfg.ServerURL != nil {
 		cfg.ServerURL = strings.TrimSpace(*fileCfg.ServerURL)
+	}
+	if fileCfg.WSListenAddr != nil {
+		cfg.WSListenAddr = strings.TrimSpace(*fileCfg.WSListenAddr)
 	}
 	if fileCfg.Token != nil {
 		cfg.Token = *fileCfg.Token
@@ -60,6 +65,9 @@ func LoadClient(path string) (client.Config, error) {
 			return cfg, fmt.Errorf("invalid timeout: %w", err)
 		}
 		cfg.Timeout = d
+	}
+	if fileCfg.Mode != nil {
+		cfg.Mode = strings.TrimSpace(*fileCfg.Mode)
 	}
 
 	return cfg, nil

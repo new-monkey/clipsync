@@ -21,6 +21,8 @@ type ServerConfig struct {
 	NotifySelfTestSet  bool
 	NotifyDebug        bool
 	NotifyDebugSet     bool
+	Mode               string // push, reverse-push, pull
+	ClientWSAddr       string // reverse-push模式下A端ws地址
 }
 
 type ServerFile struct {
@@ -34,6 +36,8 @@ type ServerFile struct {
 	ToastAppID          *string `json:"toast_app_id"`
 	NotifySelfTest      *bool   `json:"notify_self_test"`
 	NotifyDebug         *bool   `json:"notify_debug"`
+	Mode                *string `json:"mode"`
+	ClientWSAddr        *string `json:"client_ws_addr"`
 }
 
 func LoadServer(path string) (ServerConfig, error) {
@@ -88,5 +92,11 @@ func LoadServer(path string) (ServerConfig, error) {
 		cfg.NotifyDebugSet = true
 	}
 
+	if fileCfg.Mode != nil {
+		cfg.Mode = strings.TrimSpace(*fileCfg.Mode)
+	}
+	if fileCfg.ClientWSAddr != nil {
+		cfg.ClientWSAddr = strings.TrimSpace(*fileCfg.ClientWSAddr)
+	}
 	return cfg, nil
 }

@@ -1,5 +1,4 @@
 {
-  "listen_addr": ":8080",
   "token": "",
   "max_clip_bytes": 1048576,
   "panel_max_history": 200,
@@ -7,5 +6,8 @@
   "notify": false,
   "toast_app_id": "PowerShell",
   "notify_self_test": false,
-  "notify_debug": false
+  "notify_debug": false,
+  "mode": "reverse-push",
+  "listen_addr": ":8080",
+  "client_ws_addr": "127.0.0.1:8081"
 }

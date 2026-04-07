@@ -1,6 +1,11 @@
 # ClipSync
 
-轻量级 Windows 单向剪贴板同步工具（客户端 -> 服务端）。
+
+轻量级 Windows 单向剪贴板同步工具，支持多种同步模式：
+
+- push：客户端主动推送到服务端（默认/原有模式）
+- reverse-push：A端监听剪贴板，B端主动连接A端，A端通过WebSocket推送（适合目标网络仅允许B->A单向连接场景）
+- pull（预留）：B端主动拉取A端剪贴板
 
 - 客户端监听本机剪贴板文本变化并推送。
 - 服务端接收后输出控制台日志，并提供本地 Web 面板用于查看历史、展开详情和复制。
@@ -19,10 +24,14 @@
 
 ## 架构说明
 
-1. 客户端轮询剪贴板文本，检测变更后发送 HTTP POST 到服务端。
-2. 服务端校验请求与大小限制，写入控制台日志。
-3. 服务端将消息写入内存历史，Web 面板从本地接口读取并展示。
-4. 面板支持复制最新消息或指定消息到服务端机器剪贴板。
+
+### 模式说明
+
+1. push（默认）：客户端监听剪贴板，主动HTTP推送到服务端。
+2. reverse-push：A端监听剪贴板，作为WebSocket服务端，B端主动连接A端，A端检测到剪贴板变化后推送到所有已连接B端。
+3. pull（预留）：B端主动拉取A端剪贴板。
+
+> 推荐 reverse-push 用于“目标网络仅允许B->A单向连接”的场景。
 
 ## 快速开始
 
@@ -82,7 +91,8 @@ clipsync-windows-amd64/
   LICENSE
 ```
 
-### 2. 启动服务端（目标机器）
+
+### 2. 启动服务端（目标机器，push模式）
 
 ```powershell
 clipsync-server.exe -config .\configs\server.json
@@ -99,7 +109,8 @@ clipsync-server.exe -config .\configs\server.json
 
 http://127.0.0.1:8080/panel
 
-### 3. 启动客户端（源机器）
+
+### 3. 启动客户端（源机器，push模式）
 
 ```powershell
 clipsync-client.exe -config .\configs\client.json
@@ -107,7 +118,52 @@ clipsync-client.exe -config .\configs\client.json
 
 如果未显式传入 `-config`，客户端会按相同规则自动查找 `client.json`。
 
-## 配置文件
+
+---
+
+## 被动推送（reverse-push）模式
+
+
+### A端（监听剪贴板，作为WebSocket服务端）
+
+1. 配置 client.json：
+
+```json
+{
+  "mode": "reverse-push",
+  "ws_listen_addr": ":8081",
+  "interval": "300ms"
+}
+```
+
+2. 启动A端：
+
+```powershell
+clipsync-client.exe -config .\configs\client.json
+```
+
+或Linux下：
+
+```bash
+go run ./cmd/client/main.go -config ./configs/client.json
+```
+
+
+### B端（作为WebSocket客户端，主动连接A端，集成于server）
+
+1. 配置 server.json：
+
+```json
+{
+  "mode": "reverse-push",
+  "listen_addr": ":8080",
+  "client_ws_addr": "192.168.1.100:8081"
+}
+```
+
+2. 启动 server，web panel 会自动展示A端推送的内容。
+
+---
 
 ### 服务端配置示例
 
@@ -127,18 +183,28 @@ clipsync-client.exe -config .\configs\client.json
 }
 ```
 
-### 客户端配置示例
+
+### 客户端配置示例（支持mode字段）
 
 见 [configs/client.json](configs/client.json)
 
 ```json
+// push模式
 {
+  "mode": "push",
   "server_url": "http://127.0.0.1:8080/clip",
   "token": "",
   "interval": "300ms",
   "machine_id": "",
   "max_clip_bytes": 1048576,
   "timeout": "8s"
+}
+
+// reverse-push模式
+{
+  "mode": "reverse-push",
+  "ws_listen_addr": ":8081",
+  "interval": "300ms"
 }
 ```
 
