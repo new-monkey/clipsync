@@ -30,9 +30,11 @@ type Config struct {
 }
 
 func Run(cfg Config) error {
-	if cfg.Mode == "reverse-push" {
-		return runReversePush(cfg)
-	} else {
+       log.Printf("[mode] client running in %s mode", cfg.Mode)
+       if cfg.Mode == "reverse-push" {
+	       log.Printf("[reverse-push] ws_listen_addr = %s", cfg.WSListenAddr)
+	       return runReversePush(cfg)
+       } else {
 		if cfg.ServerURL == "" {
 			return fmt.Errorf("server url is required")
 		}
@@ -106,56 +108,61 @@ func Run(cfg Config) error {
 
 // reverse-push模式下，作为WebSocket服务端，B端主动连接A端，A端推送剪贴板内容
 func runReversePush(cfg Config) error {
-	addr := cfg.WSListenAddr
-	if addr == "" {
-		addr = ":8081" // 默认监听端口
-	}
-	hub := ws.NewHub()
-	http.HandleFunc("/ws", hub.ServeWS)
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("listen failed: %v", err)
-	}
-	go func() {
-		log.Printf("WebSocket server listening on %s/ws", addr)
-		if err := http.Serve(listener, nil); err != nil {
-			log.Fatalf("WebSocket server error: %v", err)
-		}
-	}()
+       addr := cfg.WSListenAddr
+       if addr == "" {
+	       addr = ":8081" // 默认监听端口
+       }
+       log.Printf("[reverse-push] preparing to listen on ws://%s/ws", addr)
+       hub := ws.NewHub()
+       http.HandleFunc("/ws", hub.ServeWS)
+       listener, err := net.Listen("tcp", addr)
+       if err != nil {
+	       log.Printf("[reverse-push] listen failed: %v", err)
+	       return fmt.Errorf("listen failed: %v", err)
+       }
+       log.Printf("[reverse-push] WebSocket server successfully listening on ws://%s/ws", addr)
+       go func() {
+	       if err := http.Serve(listener, nil); err != nil {
+		       log.Fatalf("[reverse-push] WebSocket server error: %v", err)
+	       }
+       }()
 
-	ticker := time.NewTicker(cfg.Interval)
-	defer ticker.Stop()
+       ticker := time.NewTicker(cfg.Interval)
+       defer ticker.Stop()
 
-	var lastHash string
-	for range ticker.C {
-		text, err := readClipboardText()
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-		textBytes := len([]byte(text))
-		if textBytes > cfg.MaxClipBytes {
-			continue
-		}
-		h := sha256.Sum256([]byte(text))
-		hash := hex.EncodeToString(h[:])
-		if hash == lastHash {
-			continue
-		}
-		payload := protocol.ClipPayload{
-			MachineID: cfg.MachineID,
-			Timestamp: time.Now().Format(time.RFC3339Nano),
-			Text:      text,
-			SHA256:    hash,
-		}
-		b, _ := json.Marshal(payload)
-		hub.Broadcast(b)
-		lastHash = hash
-		log.Printf("[reverse-push] pushed clipboard: %d bytes", textBytes)
-	}
-	return nil
+       var lastHash string
+       for range ticker.C {
+	       text, err := readClipboardText()
+	       if err != nil {
+		       log.Printf("[reverse-push] readClipboardText error: %v", err)
+		       continue
+	       }
+	       if strings.TrimSpace(text) == "" {
+		       log.Printf("[reverse-push] clipboard empty, skip")
+		       continue
+	       }
+	       textBytes := len([]byte(text))
+	       if textBytes > cfg.MaxClipBytes {
+		       log.Printf("[reverse-push] clipboard too large: %d bytes (max=%d)", textBytes, cfg.MaxClipBytes)
+		       continue
+	       }
+	       h := sha256.Sum256([]byte(text))
+	       hash := hex.EncodeToString(h[:])
+	       if hash == lastHash {
+		       continue
+	       }
+	       payload := protocol.ClipPayload{
+		       MachineID: cfg.MachineID,
+		       Timestamp: time.Now().Format(time.RFC3339Nano),
+		       Text:      text,
+		       SHA256:    hash,
+	       }
+	       b, _ := json.Marshal(payload)
+	       log.Printf("[reverse-push] broadcasting clipboard: %d bytes, hash=%s", textBytes, hash)
+	       hub.Broadcast(b)
+	       lastHash = hash
+       }
+       return nil
 }
 
 func sendWithRetry(client *http.Client, url, token string, payload protocol.ClipPayload) error {

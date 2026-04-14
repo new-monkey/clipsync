@@ -22,11 +22,14 @@ func RunWSClient(addr string, token string, onClip OnClipReceivedFunc) error {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-	log.Printf("Connecting to ws://%s ...", addr)
-	c, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/ws", nil)
+	wsURL := "ws://" + addr + "/ws"
+	log.Printf("[mode] server running in reverse-push mode, connecting to wsURL: %s", wsURL)
+	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
+		log.Printf("[reverse-push] ws connect error: %v", err)
 		return err
 	}
+	log.Printf("[reverse-push] ws connected to %s", wsURL)
 	defer c.Close()
 
 	done := make(chan struct{})
@@ -35,14 +38,15 @@ func RunWSClient(addr string, token string, onClip OnClipReceivedFunc) error {
 		for {
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				log.Println("read error:", err)
+				log.Printf("[reverse-push] ws read error: %v", err)
 				return
 			}
 			var payload protocol.ClipPayload
 			if err := json.Unmarshal(message, &payload); err != nil {
-				log.Println("invalid payload:", err)
+				log.Printf("[reverse-push] invalid payload: %v", err)
 				continue
 			}
+			log.Printf("[reverse-push] received clipboard: %d bytes, hash=%s", len(payload.Text), payload.SHA256)
 			if onClip != nil {
 				onClip(payload)
 			}
@@ -52,9 +56,10 @@ func RunWSClient(addr string, token string, onClip OnClipReceivedFunc) error {
 	for {
 		select {
 		case <-done:
+			log.Printf("[reverse-push] ws receive done")
 			return nil
 		case <-interrupt:
-			log.Println("interrupt")
+			log.Printf("[reverse-push] ws interrupt, closing connection")
 			c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 			time.Sleep(time.Second)
 			return nil
