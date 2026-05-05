@@ -104,6 +104,12 @@ func main() {
 		if fileCfg.NotifyDebugSet {
 			cfg.NotifyDebug = fileCfg.NotifyDebug
 		}
+		if fileCfg.Mode != "" {
+			cfg.Mode = fileCfg.Mode
+		}
+		if fileCfg.ClientWSAddr != "" {
+			cfg.ClientWSAddr = fileCfg.ClientWSAddr
+		}
 	}
 
 	setFlags := map[string]bool{}
