@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"clipsync/internal/hub"
-	"clipsync/internal/net"
+	netw "clipsync/internal/net"
 	"clipsync/internal/store"
 )
 
@@ -29,7 +29,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Printf("clipsync v2 (feature/v2-pubsub)\n")
-	fmt.Printf("config=%s roles=%s listen=%s tls=%s\n", config, roles, listen, (tlsCert != ""))
+	fmt.Printf("config=%s roles=%s listen=%s tls=%t\n", config, roles, listen, (tlsCert != ""))
 
 	// instantiate MemoryStore (MVP default)
 	st := store.NewMemoryStore()
@@ -37,7 +37,7 @@ func main() {
 
 	// HTTP mux and ws handler
 	mux := http.NewServeMux()
-	mux.Handle(wsPath, net.NewWSHandler(h))
+	mux.Handle(wsPath, netw.NewWSHandler(h))
 	// placeholder admin endpoints
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)

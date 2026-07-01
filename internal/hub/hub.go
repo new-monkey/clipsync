@@ -1,21 +1,18 @@
 package hub
 
 import (
-	"encoding/json"
 	"log"
 	"sync"
-	"time"
 
 	"clipsync/internal/store"
-	"clipsync/pkg/proto"
 )
 
 // Hub is the in-process pub/sub broker. It relies on a Store to provide
 // cross-instance pub/sub or persistence when configured.
 type Hub struct {
 	mu       sync.RWMutex
-	conns    map[string]*Client                 // clientID -> client
-	channels map[string]map[string]*Client      // channel -> clientID -> client
+	conns    map[string]*Client            // clientID -> client
+	channels map[string]map[string]*Client // channel -> clientID -> client
 	store    store.Store
 }
 

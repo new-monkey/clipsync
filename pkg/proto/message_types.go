@@ -1,7 +1,5 @@
 package proto
 
-import "encoding/json"
-
 // AuthBody sent by a client immediately after connecting.
 type AuthBody struct {
 	Token    string `json:"token"`

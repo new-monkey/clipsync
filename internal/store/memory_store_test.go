@@ -3,6 +3,7 @@ package store
 import (
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestMemoryStorePublishSubscribe(t *testing.T) {
@@ -21,8 +22,8 @@ func TestMemoryStorePublishSubscribe(t *testing.T) {
 	}
 
 	// give goroutine a moment
-	for i := 0; i < 10 && atomic.LoadInt32(&seen) == 0; i++ {
-		// busy-loop small sleep
+	for i := 0; i < 100 && atomic.LoadInt32(&seen) == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
 	}
 	if atomic.LoadInt32(&seen) == 0 {
 		t.Fatalf("subscriber did not receive message")

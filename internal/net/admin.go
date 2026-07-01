@@ -2,7 +2,6 @@ package netw
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	"clipsync/internal/hub"
@@ -21,7 +20,9 @@ func NewAdminHandler(h *hub.Hub) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{"channels": chs})
 		case "POST":
-			var body struct{ Channel string `json:"channel"` }
+			var body struct {
+				Channel string `json:"channel"`
+			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Channel == "" {
 				w.WriteHeader(400)
 				w.Write([]byte("invalid channel body"))

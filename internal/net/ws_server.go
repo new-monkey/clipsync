@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"clipsync/internal/hub"
 	"clipsync/pkg/proto"
+
+	"github.com/gorilla/websocket"
 )
 
 var upgrader = websocket.Upgrader{
@@ -50,7 +51,9 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 				if err := json.Unmarshal(msg, &env); err != nil {
 					// send a structured error back to the peer
 					errEnv := proto.Envelope{Type: "error"}
-					b := struct{ Error string `json:"error"` }{Error: "invalid envelope: " + err.Error()}
+					b := struct {
+						Error string `json:"error"`
+					}{Error: "invalid envelope: " + err.Error()}
 					bb, _ := json.Marshal(b)
 					errEnv.Body = bb
 					if rb, rerr := json.Marshal(errEnv); rerr == nil {
@@ -64,7 +67,9 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 				if env.Type == "" {
 					// send error
 					errEnv := proto.Envelope{Type: "error"}
-					b := struct{ Error string `json:"error"` }{Error: "empty message type"}
+					b := struct {
+						Error string `json:"error"`
+					}{Error: "empty message type"}
 					bb, _ := json.Marshal(b)
 					errEnv.Body = bb
 					if rb, rerr := json.Marshal(errEnv); rerr == nil {
@@ -73,7 +78,7 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 					}
 					continue
 				}
-				client.handleMessage(&env)
+				client.HandleMessage(&env)
 			}
 		}()
 	}
@@ -84,6 +89,6 @@ func ListenOnFreePort() (net.Listener, string, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, "", err
-		}
+	}
 	return ln, ln.Addr().String(), nil
 }

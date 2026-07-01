@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"clipsync/pkg/proto"
 	"clipsync/internal/auth"
+	"clipsync/pkg/proto"
+
+	"github.com/gorilla/websocket"
 )
 
 const MaxMessageTextBytes = 1048576 // 1MB max for message text
@@ -29,11 +30,11 @@ type Client struct {
 // NewClient constructs a client and starts its write pump.
 func NewClient(conn *websocket.Conn, hub *Hub) *Client {
 	c := &Client{
-		conn:   conn,
-		hub:    hub,
-		send:   make(chan []byte, 64),
-		subs:   make(map[string]struct{}),
-		authed: false,
+		conn:     conn,
+		hub:      hub,
+		send:     make(chan []byte, 64),
+		subs:     make(map[string]struct{}),
+		authed:   false,
 		lastSeen: time.Now(),
 	}
 	go c.writePump()
@@ -82,8 +83,8 @@ func (c *Client) writePump() {
 	}
 }
 
-// handleMessage handles an incoming envelope. Called from reader loop.
-func (c *Client) handleMessage(env *proto.Envelope) {
+// HandleMessage handles an incoming envelope. Called from reader loop.
+func (c *Client) HandleMessage(env *proto.Envelope) {
 	switch env.Type {
 	case "auth":
 		var b struct {
@@ -109,25 +110,35 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 		c.hub.RegisterClient(c)
 		c.sendAck(env.ID)
 	case "subscribe":
-		var sb struct{ Channel string `json:"channel"` }
+		var sb struct {
+			Channel string `json:"channel"`
+		}
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
 			c.sendError(env.ID, "invalid subscribe body")
 			return
 		}
-		if !c.ensureAuthed(env.ID) { return }
+		if !c.ensureAuthed(env.ID) {
+			return
+		}
 		c.hub.Subscribe(c.ID, sb.Channel)
 		c.sendAck(env.ID)
 	case "unsubscribe":
-		var sb struct{ Channel string `json:"channel"` }
+		var sb struct {
+			Channel string `json:"channel"`
+		}
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
 			c.sendError(env.ID, "invalid unsubscribe body")
 			return
 		}
-		if !c.ensureAuthed(env.ID) { return }
+		if !c.ensureAuthed(env.ID) {
+			return
+		}
 		c.hub.Unsubscribe(c.ID, sb.Channel)
 		c.sendAck(env.ID)
 	case "publish":
-		if !c.ensureAuthed(env.ID) { return }
+		if !c.ensureAuthed(env.ID) {
+			return
+		}
 		// validate publish body
 		var pb proto.PublishBody
 		if err := json.Unmarshal(env.Body, &pb); err != nil {
@@ -155,8 +166,10 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 		c.hub.Publish(pb.Channel, raw, c.ID)
 		c.sendAck(env.ID)
 	case "direct":
-		if !c.ensureAuthed(env.ID) { return }
-		var db struct{
+		if !c.ensureAuthed(env.ID) {
+			return
+		}
+		var db struct {
 			Target string `json:"target"`
 		}
 		if err := json.Unmarshal(env.Body, &db); err != nil {
@@ -183,7 +196,10 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 
 func (c *Client) sendAck(refID string) {
 	env := proto.Envelope{Type: "ack", ID: "", Body: nil}
-	b := struct{ RefID string `json:"ref_id"`; Status string `json:"status"` }{RefID: refID, Status: "ok"}
+	b := struct {
+		RefID  string `json:"ref_id"`
+		Status string `json:"status"`
+	}{RefID: refID, Status: "ok"}
 	bb, _ := json.Marshal(b)
 	env.Body = bb
 	raw, _ := json.Marshal(env)
@@ -196,7 +212,10 @@ func (c *Client) sendAck(refID string) {
 
 func (c *Client) sendError(refID, reason string) {
 	env := proto.Envelope{Type: "error", ID: "", Body: nil}
-	b := struct{ RefID string `json:"ref_id"`; Error string `json:"error"` }{RefID: refID, Error: reason}
+	b := struct {
+		RefID string `json:"ref_id"`
+		Error string `json:"error"`
+	}{RefID: refID, Error: reason}
 	bb, _ := json.Marshal(b)
 	env.Body = bb
 	raw, _ := json.Marshal(env)
