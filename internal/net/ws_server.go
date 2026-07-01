@@ -47,8 +47,15 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 				}
 				var env proto.Envelope
 				if err := json.Unmarshal(msg, &env); err != nil {
-					log.Printf("invalid envelope: %v", err)
-					// send error and continue
+					// send a structured error back to the peer
+					errEnv := proto.Envelope{Type: "error"}
+					b := struct{ Error string `json:"error"` }{Error: "invalid envelope: " + err.Error()}
+					bb, _ := json.Marshal(b)
+					errEnv.Body = bb
+					if rb, rerr := json.Marshal(errEnv); rerr == nil {
+						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+						conn.WriteMessage(websocket.TextMessage, rb)
+					}
 					continue
 				}
 				client.handleMessage(&env)
