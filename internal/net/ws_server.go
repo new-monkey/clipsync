@@ -3,6 +3,7 @@ package netw
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
@@ -58,8 +59,31 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 					}
 					continue
 				}
+				// enforce a max message size in bytes (already SetReadLimit), and additional
+				// reject empty envelopes
+				if env.Type == "" {
+					// send error
+					errEnv := proto.Envelope{Type: "error"}
+					b := struct{ Error string `json:"error"` }{Error: "empty message type"}
+					bb, _ := json.Marshal(b)
+					errEnv.Body = bb
+					if rb, rerr := json.Marshal(errEnv); rerr == nil {
+						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+						conn.WriteMessage(websocket.TextMessage, rb)
+					}
+					continue
+				}
 				client.handleMessage(&env)
 			}
 		}()
 	}
+}
+
+// helper to get a free TCP listener port for tests
+func ListenOnFreePort() (net.Listener, string, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", err
+		}
+	return ln, ln.Addr().String(), nil
 }

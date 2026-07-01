@@ -49,16 +49,33 @@ func (c *Client) Close() {
 	c.mu.Unlock()
 }
 
-// writePump sends messages from c.send to the websocket connection.
+// writePump sends messages from c.send to the websocket connection and sends
+// periodic control pings to keep the connection alive.
 func (c *Client) writePump() {
+	pingTicker := time.NewTicker(25 * time.Second)
 	defer func() {
+		pingTicker.Stop()
 		c.conn.Close()
 	}()
-	for b := range c.send {
-		c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
-			log.Printf("client %s write error: %v", c.ID, err)
-			return
+	for {
+		select {
+		case b, ok := <-c.send:
+			if !ok {
+				// channel closed
+				return
+			}
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.WriteMessage(websocket.TextMessage, b); err != nil {
+				log.Printf("client %s write error: %v", c.ID, err)
+				return
+			}
+		case <-pingTicker.C:
+			// send control ping frame
+			c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err := c.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+				log.Printf("client %s ping error: %v", c.ID, err)
+				return
+			}
 		}
 	}
 }
