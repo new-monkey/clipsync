@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"clipsync/internal/hub"
-	"clipsync/internal/netw"
+	"clipsync/internal/net"
 	"clipsync/internal/store"
 )
 
@@ -37,7 +37,7 @@ func main() {
 
 	// HTTP mux and ws handler
 	mux := http.NewServeMux()
-	mux.Handle(wsPath, netw.NewWSHandler(h))
+	mux.Handle(wsPath, net.NewWSHandler(h))
 	// placeholder admin endpoints
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
