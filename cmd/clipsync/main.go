@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	"clipsync/internal/hub"
+	"clipsync/internal/netw"
 	"clipsync/internal/store"
 )
 
@@ -16,12 +18,14 @@ func main() {
 	var listen string
 	var tlsCert string
 	var tlsKey string
+	var wsPath string
 
 	flag.StringVar(&config, "config", "", "path to config file")
 	flag.StringVar(&roles, "roles", "server", "comma-separated roles: server,publisher,subscriber")
 	flag.StringVar(&listen, "listen", ":8080", "server listen address")
 	flag.StringVar(&tlsCert, "tls-cert", "", "path to TLS cert file (optional)")
 	flag.StringVar(&tlsKey, "tls-key", "", "path to TLS key file (optional)")
+	flag.StringVar(&wsPath, "ws-path", "/v2/ws", "websocket path to mount")
 	flag.Parse()
 
 	fmt.Printf("clipsync v2 (feature/v2-pubsub)\n")
@@ -30,23 +34,40 @@ func main() {
 	// instantiate MemoryStore (MVP default)
 	st := store.NewMemoryStore()
 	h := hub.NewHub(st)
-	_ = h // hub will be used in later PRs
 
-	// simple role handling for the skeleton: print what would run
+	// HTTP mux and ws handler
+	mux := http.NewServeMux()
+	mux.Handle(wsPath, netw.NewWSHandler(h))
+	// placeholder admin endpoints
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("ok"))
+	})
+
 	r := strings.Split(roles, ",")
 	for _, role := range r {
 		switch strings.TrimSpace(role) {
 		case "server":
-			log.Printf("[skeleton] would start server on %s (TLS cert provided=%v)", listen, tlsCert != "")
+			log.Printf("starting server on %s (TLS cert provided=%v)", listen, tlsCert != "")
 		case "publisher":
-			log.Printf("[skeleton] would start publisher (clipboard watcher)")
+			log.Printf("starting publisher (clipboard watcher)")
 		case "subscriber":
-			log.Printf("[skeleton] would start subscriber (clipboard writer)")
+			log.Printf("starting subscriber (clipboard writer)")
 		default:
 			log.Printf("unknown role: %s", role)
 		}
 	}
 
-	// block here in the skeleton so the binary stays alive during manual tests
-	select {}
+	srv := &http.Server{Addr: listen, Handler: mux}
+	if tlsCert != "" && tlsKey != "" {
+		log.Printf("listening (TLS) on %s", listen)
+		if err := srv.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
+			log.Fatalf("server exited: %v", err)
+		}
+	} else {
+		log.Printf("listening (plain) on %s", listen)
+		if err := srv.ListenAndServe(); err != nil {
+			log.Fatalf("server exited: %v", err)
+		}
+	}
 }

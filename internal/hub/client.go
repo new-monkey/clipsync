@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"clipsync/pkg/proto"
+	"clipsync/internal/auth"
 )
 
 // Client represents a connected websocket client.
@@ -75,8 +76,8 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 			c.Close()
 			return
 		}
-		// basic token check
-		if !authValidate(b.Token) {
+		// token check using JWT/legacy fallback
+		if !auth.ValidateToken(b.Token) {
 			c.sendError(env.ID, "unauthorized")
 			c.Close()
 			return
@@ -109,12 +110,13 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 	case "publish":
 		if !c.ensureAuthed(env.ID) { return }
 		// forward raw body to hub.Publish. The body includes channel+message
-		// we wrap it into a server-envelope for delivery to subscribers
-		// For simplicity, we forward the original publish envelope bytes
+		// We build a delivery envelope for subscribers which is the original
+		// publish envelope (so clients can parse consistently).
 		raw, _ := json.Marshal(env)
 		// extract channel to pass exclude
 		var pb struct{ Channel string `json:"channel"` }
 		json.Unmarshal(env.Body, &pb)
+		// exclude sender to avoid echo; default behavior
 		c.hub.Publish(pb.Channel, raw, c.ID)
 		c.sendAck(env.ID)
 	case "direct":
