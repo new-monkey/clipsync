@@ -86,6 +86,37 @@ func (h *Hub) Unsubscribe(clientID, channel string) {
 	delete(c.subs, channel)
 }
 
+// CreateChannel ensures a channel exists. Useful for admin-created channels.
+func (h *Hub) CreateChannel(channel string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.channels[channel]; !ok {
+		h.channels[channel] = make(map[string]*Client)
+	}
+}
+
+// ListChannels returns the currently known channel names.
+func (h *Hub) ListChannels() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	res := make([]string, 0, len(h.channels))
+	for ch := range h.channels {
+		res = append(res, ch)
+	}
+	return res
+}
+
+// ListClients returns the currently connected client IDs.
+func (h *Hub) ListClients() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	res := make([]string, 0, len(h.conns))
+	for id := range h.conns {
+		res = append(res, id)
+	}
+	return res
+}
+
 // Publish delivers msg to all subscribers of channel. excludeClientID, if non-empty,
 // will not receive the message (useful to avoid echo).
 func (h *Hub) Publish(channel string, rawMsg []byte, excludeClientID string) {

@@ -11,6 +11,8 @@ import (
 	"clipsync/internal/auth"
 )
 
+const MaxMessageTextBytes = 1048576 // 1MB max for message text
+
 // Client represents a connected websocket client.
 type Client struct {
 	ID     string
@@ -126,14 +128,30 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 		c.sendAck(env.ID)
 	case "publish":
 		if !c.ensureAuthed(env.ID) { return }
-		// forward raw body to hub.Publish. The body includes channel+message
-		// We build a delivery envelope for subscribers which is the original
-		// publish envelope (so clients can parse consistently).
+		// validate publish body
+		var pb proto.PublishBody
+		if err := json.Unmarshal(env.Body, &pb); err != nil {
+			c.sendError(env.ID, "invalid publish body")
+			return
+		}
+		if pb.Channel == "" {
+			c.sendError(env.ID, "publish missing channel")
+			return
+		}
+		if pb.Message.MessageID == "" {
+			c.sendError(env.ID, "message_id required")
+			return
+		}
+		if pb.Message.Text == "" {
+			c.sendError(env.ID, "empty message text")
+			return
+		}
+		if len(pb.Message.Text) > MaxMessageTextBytes {
+			c.sendError(env.ID, "message too large")
+			return
+		}
+		// forward the original envelope JSON to subscribers; extract raw
 		raw, _ := json.Marshal(env)
-		// extract channel to pass exclude
-		var pb struct{ Channel string `json:"channel"` }
-		json.Unmarshal(env.Body, &pb)
-		// exclude sender to avoid echo; default behavior
 		c.hub.Publish(pb.Channel, raw, c.ID)
 		c.sendAck(env.ID)
 	case "direct":
@@ -143,6 +161,10 @@ func (c *Client) handleMessage(env *proto.Envelope) {
 		}
 		if err := json.Unmarshal(env.Body, &db); err != nil {
 			c.sendError(env.ID, "invalid direct body")
+			return
+		}
+		if db.Target == "" {
+			c.sendError(env.ID, "direct target required")
 			return
 		}
 		raw, _ := json.Marshal(env)
