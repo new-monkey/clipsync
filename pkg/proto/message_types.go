@@ -11,6 +11,11 @@ type SubscribeBody struct {
 	Channel string `json:"channel"`
 }
 
+// UnsubscribeBody requests unsubscription from a channel.
+type UnsubscribeBody struct {
+	Channel string `json:"channel"`
+}
+
 // ClipMessage is the payload transported inside publish/direct messages.
 type ClipMessage struct {
 	MessageID string            `json:"message_id"`

@@ -38,11 +38,7 @@ func main() {
 	// HTTP mux and ws handler
 	mux := http.NewServeMux()
 	mux.Handle(wsPath, netw.NewWSHandler(h))
-	// placeholder admin endpoints
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		w.Write([]byte("ok"))
-	})
+	mux.Handle("/", netw.NewAdminHandler(h))
 
 	r := strings.Split(roles, ",")
 	for _, role := range r {

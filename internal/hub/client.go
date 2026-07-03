@@ -110,9 +110,7 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		c.hub.RegisterClient(c)
 		c.sendAck(env.ID)
 	case "subscribe":
-		var sb struct {
-			Channel string `json:"channel"`
-		}
+		var sb proto.SubscribeBody
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
 			c.sendError(env.ID, "invalid subscribe body")
 			return
@@ -123,9 +121,7 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		c.hub.Subscribe(c.ID, sb.Channel)
 		c.sendAck(env.ID)
 	case "unsubscribe":
-		var sb struct {
-			Channel string `json:"channel"`
-		}
+		var sb proto.UnsubscribeBody
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
 			c.sendError(env.ID, "invalid unsubscribe body")
 			return
@@ -161,6 +157,14 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 			c.sendError(env.ID, "message too large")
 			return
 		}
+		if pb.Message.Timestamp == "" {
+			c.sendError(env.ID, "timestamp required")
+			return
+		}
+		if pb.Message.Origin == "" {
+			c.sendError(env.ID, "origin required")
+			return
+		}
 		// forward the original envelope JSON to subscribers; extract raw
 		raw, _ := json.Marshal(env)
 		c.hub.Publish(pb.Channel, raw, c.ID)
@@ -169,15 +173,25 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		if !c.ensureAuthed(env.ID) {
 			return
 		}
-		var db struct {
-			Target string `json:"target"`
-		}
+		var db proto.DirectBody
 		if err := json.Unmarshal(env.Body, &db); err != nil {
 			c.sendError(env.ID, "invalid direct body")
 			return
 		}
 		if db.Target == "" {
 			c.sendError(env.ID, "direct target required")
+			return
+		}
+		if db.Message.MessageID == "" {
+			c.sendError(env.ID, "message_id required")
+			return
+		}
+		if db.Message.Text == "" {
+			c.sendError(env.ID, "empty message text")
+			return
+		}
+		if len(db.Message.Text) > MaxMessageTextBytes {
+			c.sendError(env.ID, "message too large")
 			return
 		}
 		raw, _ := json.Marshal(env)

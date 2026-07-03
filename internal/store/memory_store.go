@@ -26,16 +26,10 @@ func (m *MemoryStore) Publish(channel string, msg []byte) error {
 	m.mu.RLock()
 	subs := m.subs[channel]
 	m.mu.RUnlock()
-	// notify subscribers without holding lock
 	for _, h := range subs {
-		// call in goroutine to avoid blocking publisher
 		h := h
 		go h(msg)
 	}
-	// append to history (best-effort)
-	m.mu.Lock()
-	m.history[channel] = append(m.history[channel], append([]byte(nil), msg...))
-	m.mu.Unlock()
 	return nil
 }
 
