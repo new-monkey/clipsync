@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"clipsync/internal/agentws"
+	"clipsync/internal/clipboard"
 	"clipsync/pkg/proto"
 
 	"github.com/google/uuid"
@@ -55,7 +56,7 @@ func (p *Publisher) Stop() {
 }
 
 func (p *Publisher) poll() {
-	text, err := readClipboardText()
+	text, err := clipboard.ReadText()
 	if err != nil {
 		return
 	}

@@ -7,6 +7,7 @@ import (
 	"log"
 
 	"clipsync/internal/agentws"
+	"clipsync/internal/clipboard"
 	"clipsync/pkg/proto"
 )
 
@@ -68,7 +69,7 @@ func (s *Subscriber) handleMessage(env *proto.Envelope) {
 		return
 	}
 
-	if err := writeClipboardText(pb.Message.Text); err != nil {
+	if err := clipboard.WriteText(pb.Message.Text); err != nil {
 		log.Printf("subscriber: write clipboard failed: %v", err)
 		return
 	}
