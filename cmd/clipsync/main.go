@@ -62,6 +62,25 @@ func main() {
 	fmt.Printf("clipsync v2 (feature/v2-pubsub)\n")
 	fmt.Printf("config=%s roles=%s listen=%s tls=%t\n", config, roles, listen, (tlsCert != ""))
 
+	hasServerRole := false
+	for _, r := range strings.Split(roles, ",") {
+		if strings.TrimSpace(r) == "server" {
+			hasServerRole = true
+			break
+		}
+	}
+
+	if hasServerRole {
+		hasJWTSecret := os.Getenv("CLIPSYNC_JWT_SECRET") != ""
+		hasAuthToken := os.Getenv("CLIPSYNC_AUTH_TOKEN") != ""
+		if !hasJWTSecret && !hasAuthToken {
+			log.Fatal("ERROR: Server requires authentication. Set CLIPSYNC_JWT_SECRET or CLIPSYNC_AUTH_TOKEN environment variable before starting.")
+		}
+		if !hasJWTSecret {
+			log.Printf("WARNING: Using CLIPSYNC_AUTH_TOKEN (legacy mode). For production, use CLIPSYNC_JWT_SECRET with JWT tokens.")
+		}
+	}
+
 	if clientID == "" {
 		host, err := os.Hostname()
 		if err == nil && host != "" {

@@ -135,6 +135,10 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		if !c.ensureAuthed(env.ID) {
 			return
 		}
+		if !c.hub.CheckRateLimit(c.ID) {
+			c.sendError(env.ID, "rate limited")
+			return
+		}
 		// validate publish body
 		var pb proto.PublishBody
 		if err := json.Unmarshal(env.Body, &pb); err != nil {
@@ -171,6 +175,10 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		c.sendAck(env.ID)
 	case "direct":
 		if !c.ensureAuthed(env.ID) {
+			return
+		}
+		if !c.hub.CheckRateLimit(c.ID) {
+			c.sendError(env.ID, "rate limited")
 			return
 		}
 		var db proto.DirectBody

@@ -3,6 +3,7 @@ package netw
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 )
 
 func TestWSPublishSubscribeIntegration(t *testing.T) {
+	os.Setenv("CLIPSYNC_AUTH_TOKEN", "dev-token")
 	st := store.NewMemoryStore()
 	h := hub.NewHub(st)
 	ln, addr, err := ListenOnFreePort()

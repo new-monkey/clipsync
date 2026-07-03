@@ -3,6 +3,7 @@ package hub
 import (
 	"log"
 	"sync"
+	"time"
 
 	"clipsync/internal/store"
 )
@@ -15,6 +16,7 @@ type Hub struct {
 	channels     map[string]map[string]*Client // channel -> clientID -> client
 	store        store.Store
 	unsubscribes map[string]func() // channel -> unsubscribe func
+	rl           *RateLimiter
 }
 
 // NewHub creates a Hub with the provided Store backend.
@@ -24,6 +26,7 @@ func NewHub(s store.Store) *Hub {
 		channels:     make(map[string]map[string]*Client),
 		store:        s,
 		unsubscribes: make(map[string]func()),
+		rl:           NewRateLimiter(100, time.Second),
 	}
 }
 
@@ -174,6 +177,15 @@ func (h *Hub) publish(channel string, rawMsg []byte, excludeClientID string, wri
 			log.Printf("subscriber %s channel %s send buffer full; dropping message", id, channel)
 		}
 	}
+}
+
+// CheckRateLimit checks if the client is allowed to send a message.
+// Returns true if allowed, false if rate limited.
+func (h *Hub) CheckRateLimit(clientID string) bool {
+	if h.rl == nil {
+		return true
+	}
+	return h.rl.Allow(clientID)
 }
 
 // DirectSend attempts to deliver a raw message to a specific client by id.

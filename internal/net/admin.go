@@ -3,17 +3,42 @@ package netw
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"clipsync/internal/auth"
 	"clipsync/internal/hub"
 )
 
-// NewAdminHandler returns an http.Handler that exposes simple admin endpoints
-// for channels and clients. This is intentionally minimal and protected by
-// environment-level network controls or additional auth added later.
+func requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Authorization header required"))
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("Invalid authorization format"))
+			return
+		}
+
+		if !auth.ValidateToken(parts[1]) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("Invalid or expired token"))
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func NewAdminHandler(h *hub.Hub) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/api/channels", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/channels", requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
 			chs := h.ListChannels()
@@ -34,9 +59,9 @@ func NewAdminHandler(h *hub.Hub) http.Handler {
 		default:
 			w.WriteHeader(405)
 		}
-	})
+	}))
 
-	mux.HandleFunc("/api/clients", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/clients", requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			w.WriteHeader(405)
 			return
@@ -44,7 +69,7 @@ func NewAdminHandler(h *hub.Hub) http.Handler {
 		cls := h.ListClients()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"clients": cls})
-	})
+	}))
 
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
