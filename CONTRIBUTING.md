@@ -9,14 +9,13 @@ Thanks for your interest in contributing to ClipSync.
 3. Run:
 
 ```bash
-go build ./...
+go build -o dist/clipsync ./cmd/clipsync
 ```
 
-4. For Windows binaries:
+4. For Windows cross-compile:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -o dist/clipsync-server.exe ./cmd/server
-GOOS=windows GOARCH=amd64 go build -o dist/clipsync-client.exe ./cmd/client
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/clipsync.exe ./cmd/clipsync
 ```
 
 ## Pull Request Guidelines

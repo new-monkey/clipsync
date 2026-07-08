@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.0.0] - 2026-07-08
+
+### Changed
+- Complete rewrite: single-binary Pub/Sub architecture over WebSocket.
+- One binary (`cmd/clipsync`) replaces former `cmd/server` + `cmd/client`.
+- Roles: `server`, `publisher`, `subscriber` — any combination via `--roles`.
+- Protocol: JSON envelope over WebSocket (auth/subscribe/publish/direct).
+- New internal packages: `hub/`, `agentws/`, `net/`, `store/`, `clipboard/`, `auth/`, `publisher/`, `subscriber/`, `pkg/proto/`.
+- Clipboard module unified under `internal/clipboard/` with Win32 and Linux support.
+
+### Removed
+- `cmd/server/`, `cmd/client/` — replaced by `cmd/clipsync/`.
+- `internal/client/`, `config/`, `protocol/`, `servernotify/`, `serverpanel/`, `ws/`, `wsclient/`, `winclip/`.
+- HTTP POST `/clip` push mode, reverse-push mode, Web panel, Windows toast notifications.
+- JSON config files (`configs/server.json`, `configs/client.json`), `configs/default.yaml`.
+- All build/packaging/autostart scripts under `scripts/`.
+
 ## [1.2.0] - 2026-03-13
 
 ### Added

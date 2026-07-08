@@ -4,9 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ClipSync is a lightweight Windows clipboard synchronization tool with two sync modes:
-- **push (default)**: Client polls clipboard and HTTP POSTs to server
-- **reverse-push**: Client runs a WebSocket server, other clients connect and receive broadcasts (for restricted network topologies)
+ClipSync is a lightweight Windows clipboard synchronization tool based on a Pub/Sub architecture over WebSocket. A single binary can act as server, publisher, subscriber, or any combination via `--roles` flag.
 
 Target environment: Windows 10/11. Text-only, 1MB limit.
 
@@ -14,59 +12,66 @@ Target environment: Windows 10/11. Text-only, 1MB limit.
 
 ```bash
 # Cross-compile for Windows (from Linux/macOS)
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/clipsync-server.exe ./cmd/server
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/clipsync-client.exe ./cmd/client
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/clipsync.exe ./cmd/clipsync
 
-# Or use the provided scripts
-chmod +x scripts/build-windows.sh && ./scripts/build-windows.sh
+# Build for current platform
+go build -o dist/clipsync ./cmd/clipsync
 ```
 
-No test suite exists (`go test` will report no test files).
+```bash
+go test ./internal/... ./pkg/...
+go vet ./...
+```
 
 ## Architecture
 
 ```
-cmd/
-  server/main.go   # HTTP server + WebSocket client + Web panel
-  client/main.go   # Clipboard poller + HTTP pusher + WebSocket server
+cmd/clipsync/       # Single binary entrypoint
 
 internal/
-  client/           # Platform-specific clipboard read (Windows API)
-  config/           # JSON config loading for both binaries
-  protocol/         # ClipPayload JSON schema
-  servernotify/     # Windows toast notifications
-  serverpanel/      # Embedded web panel (HTML+JS) + history REST API
-  winclip/          # Platform-specific clipboard write
-  ws/               # WebSocket hub (reverse-push mode: A-side broadcasts)
-  wsclient/         # WebSocket client (reverse-push mode: B-side receives)
+  agentws/          # WebSocket client (auth, subscribe, publish, reconnect)
+  auth/             # JWT / token validation
+  clipboard/        # Platform-specific clipboard read/write (Win32 API)
+  hub/              # Pub/sub broker (client registry, channel management)
+  net/              # WebSocket server + admin HTTP API
+  publisher/        # Clipboard poller + publisher role
+  store/            # Storage interface + MemoryStore
+  subscriber/       # Message receiver + clipboard writer role
+
+pkg/proto/          # Envelope and message type definitions
 ```
 
-### Sync Mode Flow
+### Message Flow
 
-**push mode**: Client polls clipboard → HTTP POST to server `/clip` → server logs + stores in panel + optional toast
+```
+Publisher polls clipboard → create ClipMessage → publish envelope → WebSocket → Hub
+  → Hub validates + Store.SaveHistory + broadcast to subscribers
+Subscriber receives publish envelope → extract ClipMessage.Text → write to clipboard
+```
 
-**reverse-push mode**: A-side runs WebSocket server on `:8081`, polls clipboard, broadcasts to all connected B-sides. B-side connects via `ws://<A-ip>:8081/ws` and receives broadcasts.
+### Protocol
 
-### Key Data Structures
+JSON envelope format:
 
-`protocol.ClipPayload`: `machine_id`, `timestamp`, `text`, `sha256`
-
-`serverpanel.Panel`: thread-safe history buffer with `Add`, `copyLatest`, `copyByID`
-
-`ws.Hub`: concurrent WebSocket connection registry with `Broadcast`
+```json
+{"type":"auth","id":"1","body":{"token":"<token>","client_id":"laptop-1"}}
+{"type":"subscribe","id":"2","body":{"channel":"office"}}
+{"type":"publish","id":"3","body":{"channel":"office","message":{"message_id":"uuid","timestamp":"RFC3339","origin":"hostname","text":"content"}}}
+{"type":"direct","id":"4","body":{"target":"client-A","message":{...}}}
+```
 
 ### Platform-Specific Code
 
-Uses Go build tags (`//go:build windows`):
-- `internal/client/clipboard_windows.go` — reads Windows clipboard via `user32.dll`/`kernel32.dll`
-- `internal/winclip/set_windows.go` — writes Windows clipboard
-- `internal/serverpanel/browser_windows.go` — opens browser via `cmd.exe`
-- `internal/servernotify/windows.go` — Windows toast notifications via PowerShell
+- `internal/clipboard/clipboard_windows.go` — reads/writes clipboard via `user32.dll`/`kernel32.dll`
+- `internal/clipboard/clipboard_linux.go` — uses `xclip`/`xsel`/`wl-paste`
 
 ## Configuration
 
-Both server and client load JSON config files (via `-config` flag or default path resolution). CLI flags override config file values.
+Uses CLI flags and environment variables exclusively. No config file required.
 
-Server config (`configs/server.json`): `listen_addr`, `token`, `max_clip_bytes`, `panel_max_history`, `auto_open_panel`, `notify`, `mode`, `client_ws_addr`
+| Env var | Purpose |
+|---------|---------|
+| `CLIPSYNC_JWT_SECRET` | JWT secret (production) |
+| `CLIPSYNC_AUTH_TOKEN` | Static token auth (dev/test) |
 
-Client config (`configs/client.json`): `server_url`, `ws_listen_addr`, `token`, `interval`, `machine_id`, `max_clip_bytes`, `timeout`, `mode`
+See `docs/USAGE.md` for full CLI reference.
