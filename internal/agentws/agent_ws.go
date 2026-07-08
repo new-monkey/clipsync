@@ -43,6 +43,10 @@ func (a *AgentWS) Connect() error {
 	}
 	a.conn.SetReadLimit(1024 * 1024)
 	a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	a.conn.SetPingHandler(func(appData string) error {
+		a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return a.conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
+	})
 	a.conn.SetPongHandler(func(appData string) error {
 		a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		return nil
@@ -203,6 +207,7 @@ func (a *AgentWS) StartReader() {
 				log.Printf("agentws read error: %v", err)
 				if a.reconnect {
 					a.reconnectLoop()
+					continue
 				}
 				return
 			}
@@ -256,12 +261,16 @@ func (a *AgentWS) reconnectLoop() {
 		log.Printf("agentws reauthenticated")
 
 		a.mu.Lock()
+		channels := make([]string, 0, len(a.subscribed))
 		for ch := range a.subscribed {
+			channels = append(channels, ch)
+		}
+		a.mu.Unlock()
+		for _, ch := range channels {
 			if err := a.Subscribe(ch); err != nil {
 				log.Printf("agentws resubscribe %s failed: %v", ch, err)
 			}
 		}
-		a.mu.Unlock()
 
 		log.Printf("agentws all channels resubscribed")
 		return
