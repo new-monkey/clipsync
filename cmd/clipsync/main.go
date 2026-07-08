@@ -185,6 +185,7 @@ func runPublisher(cfg AgentConfig) {
 	}
 
 	ws.StartReader()
+	ws.StartHeartbeat(25 * time.Second)
 
 	p := publisher.NewPublisher(ws, cfg.Channel, cfg.PollInterval, cfg.MaxBytes)
 	p.Start()
@@ -210,6 +211,7 @@ func runSubscriber(cfg AgentConfig) {
 	}
 
 	ws.StartReader()
+	ws.StartHeartbeat(25 * time.Second)
 
 	s := subscriber.NewSubscriber(ws, cfg.Channel)
 	s.Start()

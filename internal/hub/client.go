@@ -92,13 +92,13 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 			ClientID string `json:"client_id"`
 		}
 		if err := json.Unmarshal(env.Body, &b); err != nil {
-			c.sendError(env.ID, "invalid auth body")
+			c.SendError(env.ID, "invalid auth body")
 			c.Close()
 			return
 		}
 		// token check using JWT/legacy fallback
 		if !auth.ValidateToken(b.Token) {
-			c.sendError(env.ID, "unauthorized")
+			c.SendError(env.ID, "unauthorized")
 			c.Close()
 			return
 		}
@@ -112,7 +112,7 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 	case "subscribe":
 		var sb proto.SubscribeBody
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
-			c.sendError(env.ID, "invalid subscribe body")
+			c.SendError(env.ID, "invalid subscribe body")
 			return
 		}
 		if !c.ensureAuthed(env.ID) {
@@ -123,7 +123,7 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 	case "unsubscribe":
 		var sb proto.UnsubscribeBody
 		if err := json.Unmarshal(env.Body, &sb); err != nil {
-			c.sendError(env.ID, "invalid unsubscribe body")
+			c.SendError(env.ID, "invalid unsubscribe body")
 			return
 		}
 		if !c.ensureAuthed(env.ID) {
@@ -136,37 +136,37 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 			return
 		}
 		if !c.hub.CheckRateLimit(c.ID) {
-			c.sendError(env.ID, "rate limited")
+			c.SendError(env.ID, "rate limited")
 			return
 		}
 		// validate publish body
 		var pb proto.PublishBody
 		if err := json.Unmarshal(env.Body, &pb); err != nil {
-			c.sendError(env.ID, "invalid publish body")
+			c.SendError(env.ID, "invalid publish body")
 			return
 		}
 		if pb.Channel == "" {
-			c.sendError(env.ID, "publish missing channel")
+			c.SendError(env.ID, "publish missing channel")
 			return
 		}
 		if pb.Message.MessageID == "" {
-			c.sendError(env.ID, "message_id required")
+			c.SendError(env.ID, "message_id required")
 			return
 		}
 		if pb.Message.Text == "" {
-			c.sendError(env.ID, "empty message text")
+			c.SendError(env.ID, "empty message text")
 			return
 		}
 		if len(pb.Message.Text) > MaxMessageTextBytes {
-			c.sendError(env.ID, "message too large")
+			c.SendError(env.ID, "message too large")
 			return
 		}
 		if pb.Message.Timestamp == "" {
-			c.sendError(env.ID, "timestamp required")
+			c.SendError(env.ID, "timestamp required")
 			return
 		}
 		if pb.Message.Origin == "" {
-			c.sendError(env.ID, "origin required")
+			c.SendError(env.ID, "origin required")
 			return
 		}
 		// forward the original envelope JSON to subscribers; extract raw
@@ -178,28 +178,28 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 			return
 		}
 		if !c.hub.CheckRateLimit(c.ID) {
-			c.sendError(env.ID, "rate limited")
+			c.SendError(env.ID, "rate limited")
 			return
 		}
 		var db proto.DirectBody
 		if err := json.Unmarshal(env.Body, &db); err != nil {
-			c.sendError(env.ID, "invalid direct body")
+			c.SendError(env.ID, "invalid direct body")
 			return
 		}
 		if db.Target == "" {
-			c.sendError(env.ID, "direct target required")
+			c.SendError(env.ID, "direct target required")
 			return
 		}
 		if db.Message.MessageID == "" {
-			c.sendError(env.ID, "message_id required")
+			c.SendError(env.ID, "message_id required")
 			return
 		}
 		if db.Message.Text == "" {
-			c.sendError(env.ID, "empty message text")
+			c.SendError(env.ID, "empty message text")
 			return
 		}
 		if len(db.Message.Text) > MaxMessageTextBytes {
-			c.sendError(env.ID, "message too large")
+			c.SendError(env.ID, "message too large")
 			return
 		}
 		raw, _ := json.Marshal(env)
@@ -207,12 +207,12 @@ func (c *Client) HandleMessage(env *proto.Envelope) {
 		if ok {
 			c.sendAck(env.ID)
 		} else {
-			c.sendError(env.ID, "target not connected")
+			c.SendError(env.ID, "target not connected")
 		}
 	case "ping":
 		c.sendPong(env.ID)
 	default:
-		c.sendError(env.ID, "unknown message type")
+		c.SendError(env.ID, "unknown message type")
 	}
 }
 
@@ -232,7 +232,7 @@ func (c *Client) sendAck(refID string) {
 	}
 }
 
-func (c *Client) sendError(refID, reason string) {
+func (c *Client) SendError(refID, reason string) {
 	env := proto.Envelope{Type: "error", ID: "", Body: nil}
 	b := struct {
 		RefID string `json:"ref_id"`
@@ -261,7 +261,7 @@ func (c *Client) ensureAuthed(refID string) bool {
 	authed := c.authed
 	c.mu.Unlock()
 	if !authed {
-		c.sendError(refID, "unauthorized: must auth first")
+		c.SendError(refID, "unauthorized: must auth first")
 		c.Close()
 		return false
 	}

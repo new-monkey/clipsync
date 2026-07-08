@@ -36,12 +36,12 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 				client.Close()
 			}()
 			conn.SetReadLimit(1024 * 1024)
-			conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			conn.SetPongHandler(func(appData string) error {
 				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 				return nil
 			})
 			for {
+				conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 				_, msg, err := conn.ReadMessage()
 				if err != nil {
 					log.Printf("ws read error: %v", err)
@@ -49,33 +49,11 @@ func NewWSHandler(h *hub.Hub) http.HandlerFunc {
 				}
 				var env proto.Envelope
 				if err := json.Unmarshal(msg, &env); err != nil {
-					// send a structured error back to the peer
-					errEnv := proto.Envelope{Type: "error"}
-					b := struct {
-						Error string `json:"error"`
-					}{Error: "invalid envelope: " + err.Error()}
-					bb, _ := json.Marshal(b)
-					errEnv.Body = bb
-					if rb, rerr := json.Marshal(errEnv); rerr == nil {
-						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-						conn.WriteMessage(websocket.TextMessage, rb)
-					}
+					client.SendError("", "invalid envelope: "+err.Error())
 					continue
 				}
-				// enforce a max message size in bytes (already SetReadLimit), and additional
-				// reject empty envelopes
 				if env.Type == "" {
-					// send error
-					errEnv := proto.Envelope{Type: "error"}
-					b := struct {
-						Error string `json:"error"`
-					}{Error: "empty message type"}
-					bb, _ := json.Marshal(b)
-					errEnv.Body = bb
-					if rb, rerr := json.Marshal(errEnv); rerr == nil {
-						conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-						conn.WriteMessage(websocket.TextMessage, rb)
-					}
+					client.SendError("", "empty message type")
 					continue
 				}
 				client.HandleMessage(&env)

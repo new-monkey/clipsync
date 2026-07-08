@@ -12,15 +12,18 @@ import (
 )
 
 type AgentWS struct {
-	conn        *websocket.Conn
-	clientID    string
-	token       string
-	wsURL       string
-	reconnect   bool
-	mu          sync.Mutex
-	messageChan chan *proto.Envelope
-	stopChan    chan struct{}
-	subscribed  map[string]bool
+	conn              *websocket.Conn
+	clientID          string
+	token             string
+	wsURL             string
+	reconnect         bool
+	mu                sync.Mutex
+	messageChan       chan *proto.Envelope
+	stopChan          chan struct{}
+	subscribed        map[string]bool
+	writeMu           sync.Mutex
+	hbStopChan        chan struct{}
+	heartbeatInterval time.Duration
 }
 
 func NewAgentWS(wsURL, clientID, token string, reconnect bool) *AgentWS {
@@ -45,7 +48,10 @@ func (a *AgentWS) Connect() error {
 	a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	a.conn.SetPingHandler(func(appData string) error {
 		a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
-		return a.conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
+		a.writeMu.Lock()
+		err := a.conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
+		a.writeMu.Unlock()
+		return err
 	})
 	a.conn.SetPongHandler(func(appData string) error {
 		a.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -67,8 +73,11 @@ func (a *AgentWS) Authenticate() error {
 	env.Body = bb
 	raw, _ := json.Marshal(env)
 
+	a.writeMu.Lock()
 	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err := a.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	if err != nil {
 		return err
 	}
 
@@ -98,8 +107,11 @@ func (a *AgentWS) Subscribe(channel string) error {
 	env.Body = bb
 	raw, _ := json.Marshal(env)
 
+	a.writeMu.Lock()
 	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err := a.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	if err != nil {
 		return err
 	}
 
@@ -133,8 +145,11 @@ func (a *AgentWS) Unsubscribe(channel string) error {
 	env.Body = bb
 	raw, _ := json.Marshal(env)
 
+	a.writeMu.Lock()
 	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if err := a.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	if err != nil {
 		return err
 	}
 
@@ -171,8 +186,11 @@ func (a *AgentWS) Publish(channel string, msg *proto.ClipMessage) error {
 	env.Body = bb
 	raw, _ := json.Marshal(env)
 
+	a.writeMu.Lock()
 	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	return a.conn.WriteMessage(websocket.TextMessage, raw)
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	return err
 }
 
 func (a *AgentWS) DirectSend(targetID string, msg *proto.ClipMessage) error {
@@ -188,8 +206,11 @@ func (a *AgentWS) DirectSend(targetID string, msg *proto.ClipMessage) error {
 	env.Body = bb
 	raw, _ := json.Marshal(env)
 
+	a.writeMu.Lock()
 	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	return a.conn.WriteMessage(websocket.TextMessage, raw)
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	return err
 }
 
 func (a *AgentWS) StartReader() {
@@ -215,6 +236,11 @@ func (a *AgentWS) StartReader() {
 			var env proto.Envelope
 			if err := json.Unmarshal(msg, &env); err != nil {
 				log.Printf("agentws invalid envelope: %v", err)
+				continue
+			}
+
+			// heartbeat pong response, not for application
+			if env.Type == "pong" {
 				continue
 			}
 
@@ -273,11 +299,15 @@ func (a *AgentWS) reconnectLoop() {
 		}
 
 		log.Printf("agentws all channels resubscribed")
+
+		a.stopHeartbeat()
+		a.startHeartbeatGoroutine()
 		return
 	}
 }
 
 func (a *AgentWS) Close() error {
+	a.stopHeartbeat()
 	close(a.stopChan)
 	if a.conn != nil {
 		return a.conn.Close()
@@ -291,6 +321,69 @@ func (a *AgentWS) MessageChan() <-chan *proto.Envelope {
 
 func (a *AgentWS) ClientID() string {
 	return a.clientID
+}
+
+func (a *AgentWS) StartHeartbeat(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	a.mu.Lock()
+	a.heartbeatInterval = interval
+	if a.hbStopChan != nil {
+		close(a.hbStopChan)
+		a.hbStopChan = nil
+	}
+	a.mu.Unlock()
+	a.startHeartbeatGoroutine()
+}
+
+func (a *AgentWS) startHeartbeatGoroutine() {
+	a.mu.Lock()
+	interval := a.heartbeatInterval
+	a.mu.Unlock()
+	if interval <= 0 {
+		return
+	}
+
+	ch := make(chan struct{})
+	a.mu.Lock()
+	a.hbStopChan = ch
+	a.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ch:
+				return
+			case <-ticker.C:
+				if err := a.sendPing(); err != nil {
+					log.Printf("agentws heartbeat ping error: %v", err)
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (a *AgentWS) stopHeartbeat() {
+	a.mu.Lock()
+	if a.hbStopChan != nil {
+		close(a.hbStopChan)
+		a.hbStopChan = nil
+	}
+	a.mu.Unlock()
+}
+
+func (a *AgentWS) sendPing() error {
+	env := proto.Envelope{Type: "ping", ID: "hb"}
+	raw, _ := json.Marshal(env)
+	a.writeMu.Lock()
+	a.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	err := a.conn.WriteMessage(websocket.TextMessage, raw)
+	a.writeMu.Unlock()
+	return err
 }
 
 type AuthError struct {
